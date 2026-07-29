@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Scene } from './components/Scene';
 import { Sidebar } from './components/Sidebar';
 import { LeftSidebar } from './components/LeftSidebar';
@@ -11,6 +11,27 @@ import { useStore } from './store';
 
 export default function App() {
   const lightIntensity = useStore(state => state.lightIntensity);
+  const undo = useStore(state => state.undo);
+  const redo = useStore(state => state.redo);
+  const cameraMode = useStore(state => state.cameraMode);
+  const toggleCameraMode = useStore(state => state.toggleCameraMode);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        if (e.shiftKey) {
+          redo();
+        } else {
+          undo();
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+        redo();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo]);
 
   return (
     <div className="h-screen w-full bg-[#080808] text-zinc-300 font-sans flex flex-col overflow-hidden">
@@ -35,10 +56,20 @@ export default function App() {
             <Scene />
           </div>
           
-          <div className="absolute bottom-8 right-8 flex flex-col gap-2 items-end z-10 pointer-events-none">
+          <div className="absolute bottom-8 right-8 flex flex-col gap-2 items-end z-10">
             <div className="bg-black/80 backdrop-blur p-4 border border-white/10 flex gap-4 items-center">
-              <div className="w-10 h-10 border border-white/20 flex items-center justify-center text-xs opacity-40">3D</div>
-              <div>
+              <button 
+                onClick={toggleCameraMode}
+                className={`w-12 h-10 border flex items-center justify-center text-[10px] uppercase font-bold transition-all ${
+                  cameraMode === 'topdown' 
+                    ? 'border-orange-500 text-orange-500 bg-orange-500/10' 
+                    : 'border-white/20 text-white/40 hover:text-white hover:border-white/40'
+                }`}
+                title="Toggle Top-Down View"
+              >
+                {cameraMode === 'topdown' ? 'TOP' : '3D'}
+              </button>
+              <div className="pointer-events-none">
                 <div className="text-[10px] font-bold opacity-40 uppercase">Drag to move</div>
                 <div className="text-[10px] font-bold opacity-40 uppercase">Click to select</div>
               </div>

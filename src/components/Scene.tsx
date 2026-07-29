@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Sky, Environment, ContactShadows } from '@react-three/drei';
+import { OrbitControls, Sky, Environment, ContactShadows, PerspectiveCamera, OrthographicCamera } from '@react-three/drei';
 import { EffectComposer, N8AO, Bloom } from '@react-three/postprocessing';
 import { useStore } from '../store';
 import { Building } from './Building';
@@ -40,7 +40,7 @@ function EnvironmentSetup({ mode, intensity }: { mode: 'abstract' | 'realistic',
 }
 
 export function Scene() {
-  const { buildings, selectedId, selectBuilding, moveBuilding, environmentMode, lightIntensity } = useStore();
+  const { buildings, selectedId, selectBuilding, moveBuilding, environmentMode, lightIntensity, cameraMode } = useStore();
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const orbitRef = useRef<any>(null);
 
@@ -68,7 +68,13 @@ export function Scene() {
   };
 
   return (
-    <Canvas shadows camera={{ position: [20, 20, 30], fov: 45 }} onPointerUp={handlePointerUp}>
+    <Canvas shadows onPointerUp={handlePointerUp}>
+      {cameraMode === 'perspective' && (
+        <PerspectiveCamera makeDefault position={[20, 20, 30]} fov={45} />
+      )}
+      {cameraMode === 'topdown' && (
+        <OrthographicCamera makeDefault position={[0, 100, 0]} rotation={[-Math.PI / 2, 0, 0]} zoom={20} />
+      )}
       <EnvironmentSetup mode={environmentMode} intensity={lightIntensity} />
       
       {/* Ground */}
@@ -112,7 +118,13 @@ export function Scene() {
         <Bloom luminanceThreshold={0.8} mipmapBlur intensity={0.5} />
       </EffectComposer>
 
-      <OrbitControls ref={orbitRef} makeDefault minPolarAngle={0} maxPolarAngle={Math.PI / 2 - 0.05} />
+      <OrbitControls 
+        ref={orbitRef} 
+        makeDefault 
+        minPolarAngle={0} 
+        maxPolarAngle={Math.PI / 2 - 0.05} 
+        enableRotate={cameraMode === 'perspective'}
+      />
     </Canvas>
   );
 }

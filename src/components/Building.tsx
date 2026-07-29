@@ -22,6 +22,7 @@ export function Building({ data, isSelected, onPointerDown }: Props) {
     concreteTexture.wrapS = THREE.RepeatWrapping;
     concreteTexture.wrapT = THREE.RepeatWrapping;
     concreteTexture.repeat.set(1, 1);
+    concreteTexture.needsUpdate = true;
   }, [concreteTexture]);
 
   const blocks = useMemo(() => {
@@ -31,9 +32,11 @@ export function Building({ data, isSelected, onPointerDown }: Props) {
   const customMaterialCompile = useMemo(() => {
     return (shader: any) => {
       shader.uniforms.uWeathering = { value: weathering ? 1.0 : 0.0 };
+      shader.uniforms.uTextureSeed = { value: data.textureSeed || 0.0 };
 
       shader.vertexShader = `
         varying vec3 vWorldPosition;
+        uniform float uTextureSeed;
         ${shader.vertexShader}
       `.replace(
         `#include <worldpos_vertex>`,
@@ -41,14 +44,30 @@ export function Building({ data, isSelected, onPointerDown }: Props) {
         #include <worldpos_vertex>
         vWorldPosition = worldPosition.xyz;
         `
+      ).replace(
+        `#include <uv_vertex>`,
+        `
+        #include <uv_vertex>
+        #ifdef USE_MAP
+          if (abs(normal.x) > 0.5) {
+            vMapUv = vec2(position.z, position.y);
+          } else if (abs(normal.y) > 0.5) {
+            vMapUv = vec2(position.x, position.z);
+          } else {
+            vMapUv = vec2(position.x, position.y);
+          }
+          vMapUv = vMapUv * 0.5 + vec2(uTextureSeed * 0.1, uTextureSeed * 0.2);
+        #endif
+        `
       );
 
       shader.fragmentShader = `
         varying vec3 vWorldPosition;
         uniform float uWeathering;
+        uniform float uTextureSeed;
         
         float random(vec2 p) {
-          return fract(sin(dot(p.xy, vec2(12.9898,78.233))) * 43758.5453123);
+          return fract(sin(dot(p.xy, vec2(12.9898,78.233))) * 43758.5453123 + uTextureSeed * 0.1);
         }
         
         float noise(vec2 p) {
@@ -69,13 +88,13 @@ export function Building({ data, isSelected, onPointerDown }: Props) {
         #include <color_fragment>
         if (uWeathering > 0.5) {
           // Dark streaks simulating water stains running down
-          float streakNoise = noise(vec2(vWorldPosition.x * 2.0 + vWorldPosition.z * 2.0, vWorldPosition.y * 0.2));
+          float streakNoise = noise(vec2(vWorldPosition.x * 2.0 + vWorldPosition.z * 2.0 + uTextureSeed * 5.0, vWorldPosition.y * 0.2));
           float streaks = smoothstep(0.4, 0.8, streakNoise) * 0.4;
           diffuseColor.rgb -= streaks;
           
           // Greenish moss on surfaces facing somewhat up, or near bottom
           if (vWorldPosition.y < 3.0) {
-            float mossNoise = noise(vWorldPosition.xz * 4.0);
+            float mossNoise = noise(vWorldPosition.xz * 4.0 + uTextureSeed * 10.0);
             float moss = smoothstep(0.3, 0.7, mossNoise) * max(0.0, 3.0 - vWorldPosition.y) * 0.4;
             diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.2, 0.35, 0.15), moss);
           }
@@ -83,7 +102,7 @@ export function Building({ data, isSelected, onPointerDown }: Props) {
         `
       );
     };
-  }, [weathering]);
+  }, [weathering, data.textureSeed]);
 
   return (
     <group 
@@ -121,7 +140,7 @@ export function Building({ data, isSelected, onPointerDown }: Props) {
               roughness={0.9} 
               metalness={0.1}
               onBeforeCompile={customMaterialCompile}
-              customProgramCacheKey={() => weathering ? 'weathered' : 'clean'}
+              customProgramCacheKey={() => `${weathering ? 'weathered' : 'clean'}_${data.textureSeed || 0}`}
             />
           </mesh>
         );

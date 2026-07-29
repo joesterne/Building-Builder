@@ -3,6 +3,7 @@ export interface BuildingData {
   x: number;
   z: number;
   seed: number;
+  textureSeed?: number;
   floors: number;
   baseWidth: number;
   baseDepth: number;

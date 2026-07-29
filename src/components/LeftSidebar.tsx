@@ -1,15 +1,33 @@
 import React from 'react';
 import { useStore } from '../store';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Undo2, Redo2 } from 'lucide-react';
 
 export function LeftSidebar() {
-  const { buildings, selectedId, addBuilding, updateBuilding, deleteBuilding, generateCityBlock } = useStore();
+  const { buildings, selectedId, addBuilding, updateBuilding, deleteBuilding, generateCityBlock, undo, redo, past, future } = useStore();
   const selectedBuilding = buildings.find(b => b.id === selectedId);
 
   return (
     <aside className="w-64 border-r border-white/5 flex flex-col p-6 bg-[#0a0a0a] z-10">
       <div className="mb-6">
         <label className="text-[10px] font-black uppercase text-orange-500 mb-4 block tracking-widest">Global Actions</label>
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          <button 
+            onClick={undo}
+            disabled={past.length === 0}
+            className="h-8 bg-zinc-900 border border-white/10 flex items-center justify-center gap-2 hover:bg-orange-600/20 hover:border-orange-600 disabled:opacity-30 disabled:hover:bg-zinc-900 disabled:hover:border-white/10 transition-all"
+          >
+            <Undo2 size={12} className="text-zinc-400" />
+            <span className="text-[9px] uppercase font-bold text-white">Undo</span>
+          </button>
+          <button 
+            onClick={redo}
+            disabled={future.length === 0}
+            className="h-8 bg-zinc-900 border border-white/10 flex items-center justify-center gap-2 hover:bg-orange-600/20 hover:border-orange-600 disabled:opacity-30 disabled:hover:bg-zinc-900 disabled:hover:border-white/10 transition-all"
+          >
+            <Redo2 size={12} className="text-zinc-400" />
+            <span className="text-[9px] uppercase font-bold text-white">Redo</span>
+          </button>
+        </div>
         <div className="grid grid-cols-2 gap-2">
           <button 
             onClick={() => addBuilding(0, 0)}
@@ -124,11 +142,11 @@ export function LeftSidebar() {
 
             <div className="space-y-2">
               <div className="flex justify-between text-[10px] uppercase opacity-60 font-bold">
-                <span>Rotation Y</span>
+                <span>Rotation</span>
                 <span>{selectedBuilding.rotationY || 0}&deg;</span>
               </div>
               <input 
-                type="range" min="0" max="360" step="15" 
+                type="range" min="0" max="360" step="1" 
                 value={selectedBuilding.rotationY || 0}
                 onChange={e => updateBuilding(selectedBuilding.id, { rotationY: parseInt(e.target.value) })}
                 className="w-full h-1 bg-zinc-800 rounded-full appearance-none outline-none"
@@ -151,6 +169,15 @@ export function LeftSidebar() {
                   Roll
                 </button>
               </div>
+            </div>
+
+            <div className="space-y-2 pt-2">
+              <button 
+                onClick={() => updateBuilding(selectedBuilding.id, { textureSeed: Math.floor(Math.random() * 1000) })}
+                className="w-full py-2 bg-zinc-800 border border-white/10 hover:border-orange-500 hover:bg-orange-600/10 text-white text-[10px] uppercase font-bold transition-colors"
+              >
+                Randomize Texture
+              </button>
             </div>
 
             <div className="pt-4 border-t border-white/10 mt-4">
