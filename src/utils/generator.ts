@@ -39,23 +39,30 @@ export function generateBlocks(data: BuildingData): BlockData[] {
       blocks.push({ w: finalW, h: floorHeight * 0.8, d: finalD, x: 0, y: i * floorHeight + floorHeight / 2, z: 0, type: 'floor' });
       blocks.push({ w: finalW * 0.9, h: floorHeight, d: finalD * 0.9, x: 0, y: i * floorHeight + floorHeight / 2, z: 0, type: 'window' });
     }
-  } else if (data.style === 'monolith' || (data.style as any) === 'monolithic') {
+  } else if (data.style === 'monolith') {
     const numBlocks = Math.max(2, Math.floor(data.floors / 4));
     let currentY = 0;
     for (let i = 0; i < numBlocks; i++) {
-      const blockFloors = Math.floor(data.floors / numBlocks);
+      // Floored per-block floors summed to less than data.floors (11 floors
+      // over 2 blocks built 10), leaving the full-height core poking above
+      // the top block. The last block takes the remainder.
+      const blockFloors = i === numBlocks - 1
+        ? data.floors - Math.floor(data.floors / numBlocks) * (numBlocks - 1)
+        : Math.floor(data.floors / numBlocks);
       const bh = blockFloors * floorHeight;
       const bw = data.baseWidth * (1 - (i * 0.1));
       const bd = data.baseDepth * (1 - (i * 0.1));
-      
+
       blocks.push({ w: bw, h: bh * 0.9, d: bd, x: 0, y: currentY + (bh * 0.9) / 2, z: 0, type: 'floor' });
       blocks.push({ w: bw * 0.95, h: bh, d: bd * 0.95, x: 0, y: currentY + bh / 2, z: 0, type: 'window' });
-      
+
       const numFins = Math.floor(bw * 2);
       for (let j = 0; j <= numFins; j++) {
         blocks.push({
+          // bw shrinks 10% per block; once numFins hits 0 the j/numFins
+          // division produced NaN positions.
           w: 0.1, h: bh * 0.9, d: bd * 1.05,
-          x: -bw/2 + (j/numFins) * bw, y: currentY + (bh * 0.9) / 2, z: 0,
+          x: -bw/2 + (numFins === 0 ? 0 : (j/numFins)) * bw, y: currentY + (bh * 0.9) / 2, z: 0,
           type: 'floor'
         });
       }
@@ -70,7 +77,7 @@ export function generateBlocks(data: BuildingData): BlockData[] {
     }
     const numFins = Math.floor(w * 1.5);
     for (let j = 0; j <= numFins; j++) {
-      blocks.push({ w: 0.2, h: data.floors * floorHeight, d: d * 1.02, x: -w/2 + (j/numFins) * w, y: (data.floors * floorHeight)/2, z: 0, type: 'floor' });
+      blocks.push({ w: 0.2, h: data.floors * floorHeight, d: d * 1.02, x: -w/2 + (numFins === 0 ? 0 : (j/numFins)) * w, y: (data.floors * floorHeight)/2, z: 0, type: 'floor' });
     }
   } else if (data.style === 'podium') {
     // Large base, smaller tower on top
@@ -101,10 +108,12 @@ export function generateBlocks(data: BuildingData): BlockData[] {
     for (let i = 0; i < data.floors; i += 2) {
       const isOffsetX = rng() > 0.5;
       const offsetAmt = (rng() * 0.6 + 0.2) * (rng() > 0.5 ? 1 : -1);
-      
+
       const w = data.baseWidth;
       const d = data.baseDepth;
-      const h = floorHeight * 2;
+      // Boxes advance 2 floors at a time; on an odd floor count the last box
+      // built a full 2 floors past the core. Clamp it to what remains.
+      const h = floorHeight * Math.min(2, data.floors - i);
       
       const offsetX = isOffsetX ? offsetAmt * w : 0;
       const offsetZ = !isOffsetX ? offsetAmt * d : 0;

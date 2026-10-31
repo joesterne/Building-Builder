@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { Scene } from './components/Scene';
 import { Sidebar } from './components/Sidebar';
 import { LeftSidebar } from './components/LeftSidebar';
@@ -18,13 +18,22 @@ export default function App() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+      // Don't hijack undo/redo while typing in a form field: the shortcut used
+      // to roll back building state instead of the text, and without
+      // preventDefault the browser's own undo ran as well.
+      if ((e.target as HTMLElement | null)?.closest('input, textarea, select, [contenteditable="true"]')) return;
+      // With Shift held, e.key is 'Z'/'Y' uppercase — compare case-insensitively
+      // or Ctrl+Shift+Z redo never fires.
+      const key = e.key.toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && key === 'z') {
+        e.preventDefault();
         if (e.shiftKey) {
           redo();
         } else {
           undo();
         }
-      } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+      } else if ((e.ctrlKey || e.metaKey) && key === 'y') {
+        e.preventDefault();
         redo();
       }
     };

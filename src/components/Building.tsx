@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import { useMemo } from 'react';
 import { useTexture } from '@react-three/drei';
 import { BuildingData } from '../types';
 import { generateBlocks } from '../utils/generator';

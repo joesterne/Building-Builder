@@ -6,28 +6,9 @@
   --font-mono: 'JetBrains Mono', monospace;
 }
 
-.concrete-base {
-  background-color: #555;
-  background-image: radial-gradient(#666 1px, transparent 0);
-  background-size: 40px 40px;
-  border: 2px solid #333;
-  box-shadow: inset -10px -10px 20px rgba(0,0,0,0.5), 20px 20px 40px rgba(0,0,0,0.8);
-}
-
-.concrete-noise {
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
-  opacity: 0.15;
-  mix-blend-mode: overlay;
-  pointer-events: none;
-}
-
 .volumetric-light {
   background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, transparent 60%);
   pointer-events: none;
-}
-
-.shadow-heavy {
-  box-shadow: 40px 40px 80px -10px rgba(0,0,0,0.9);
 }
 
 .viewport-grid {

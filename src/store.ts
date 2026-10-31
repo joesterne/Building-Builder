@@ -11,10 +11,13 @@ interface AppState {
   weathering: boolean;
   lightIntensity: number;
   cameraMode: 'perspective' | 'topdown';
+  _lastUpdateKey: string | null;
+  _lastUpdateAt: number;
   addBuilding: (x: number, z: number, options?: Partial<BuildingData>) => void;
   updateBuilding: (id: string, data: Partial<BuildingData>) => void;
   deleteBuilding: (id: string) => void;
   selectBuilding: (id: string | null) => void;
+  recordHistory: () => void;
   moveBuilding: (id: string, x: number, z: number) => void;
   toggleEnvironmentMode: () => void;
   toggleWeathering: () => void;
@@ -25,9 +28,40 @@ interface AppState {
   redo: () => void;
 }
 
+const MAX_HISTORY = 40;
+
+const STYLES: BuildingData['style'][] = ['monolith', 'stacked', 'tower', 'podium', 'cantilever', 'slab'];
+
 const saveToPast = (state: AppState) => ({
-  past: [...state.past, state.buildings],
-  future: []
+  // History was uncapped and grew for the whole session; slice(-(MAX - 1))
+  // so that after appending, past holds at most MAX_HISTORY.
+  past: [...state.past.slice(-(MAX_HISTORY - 1)), state.buildings],
+  future: [],
+  // Any real history push ends an updateBuilding coalescing burst.
+  _lastUpdateKey: null,
+  _lastUpdateAt: 0
+});
+
+// Shared random-building factory: addBuilding and generateCityBlock used to
+// duplicate the whole field block with different ranges.
+const randomBuilding = (
+  x: number,
+  z: number,
+  ranges: { floorsMin: number; floorsSpan: number; sizeSpan: number; rotationY: number },
+  options?: Partial<BuildingData>
+): BuildingData => ({
+  id: uuidv4(),
+  x,
+  z,
+  seed: Math.floor(Math.random() * 10000),
+  textureSeed: Math.floor(Math.random() * 100),
+  floors: ranges.floorsMin + Math.floor(Math.random() * ranges.floorsSpan),
+  baseWidth: 4 + Math.random() * ranges.sizeSpan,
+  baseDepth: 4 + Math.random() * ranges.sizeSpan,
+  coreHeight: 1 + Math.random() * 3,
+  style: STYLES[Math.floor(Math.random() * STYLES.length)],
+  rotationY: ranges.rotationY,
+  ...options
 });
 
 export const useStore = create<AppState>((set) => ({
@@ -53,35 +87,39 @@ export const useStore = create<AppState>((set) => ({
   weathering: false,
   lightIntensity: 1.5,
   cameraMode: 'perspective',
+  _lastUpdateKey: null,
+  _lastUpdateAt: 0,
   addBuilding: (x, z, options) => set((state) => ({
     ...saveToPast(state),
-    buildings: [...state.buildings, {
-      id: uuidv4(),
-      x,
-      z,
-      seed: Math.floor(Math.random() * 10000),
-      textureSeed: Math.floor(Math.random() * 100),
-      floors: 10 + Math.floor(Math.random() * 10),
-      baseWidth: 4 + Math.random() * 4,
-      baseDepth: 4 + Math.random() * 4,
-      coreHeight: 1 + Math.random() * 3,
-      style: ['monolith', 'stacked', 'tower', 'podium', 'cantilever', 'slab'][Math.floor(Math.random() * 6)] as any,
-      rotationY: 0,
-      ...options
-    }]
+    buildings: [...state.buildings, randomBuilding(x, z, { floorsMin: 10, floorsSpan: 10, sizeSpan: 4, rotationY: 0 }, options)]
   })),
-  updateBuilding: (id, data) => set((state) => ({
-    ...saveToPast(state),
-    buildings: state.buildings.map(b => b.id === id ? { ...b, ...data } : b)
-  })),
+  updateBuilding: (id, data) => set((state) => {
+    // Sliders call this on every tick of a drag, and a full snapshot per tick
+    // floods the undo stack with intermediate values. Coalesce consecutive
+    // updates to the same building + same fields within 1s into the burst's
+    // first history entry; undo then restores the pre-drag state in one step.
+    const key = `${id}:${Object.keys(data).sort().join(',')}`;
+    const now = Date.now();
+    const coalesce = state._lastUpdateKey === key && now - state._lastUpdateAt < 1000;
+    return {
+      ...(coalesce ? { future: [] as BuildingData[][] } : saveToPast(state)),
+      _lastUpdateKey: key,
+      _lastUpdateAt: now,
+      buildings: state.buildings.map(b => b.id === id ? { ...b, ...data } : b)
+    };
+  }),
   deleteBuilding: (id) => set((state) => ({
     ...saveToPast(state),
     buildings: state.buildings.filter(b => b.id !== id),
     selectedId: state.selectedId === id ? null : state.selectedId
   })),
   selectBuilding: (id) => set({ selectedId: id }),
+  recordHistory: () => set((state) => saveToPast(state)),
   moveBuilding: (id, x, z) => set((state) => ({
-    ...saveToPast(state),
+    // No history here: Scene calls this on every pointermove during a drag,
+    // and snapshotting per call made one drag flood the undo stack (a single
+    // Undo stepped back one pixel). Scene snapshots once via recordHistory
+    // when a drag actually starts moving.
     buildings: state.buildings.map(b => b.id === id ? { ...b, x, z } : b)
   })),
   toggleEnvironmentMode: () => set((state) => ({
@@ -102,19 +140,11 @@ export const useStore = create<AppState>((set) => ({
         // Skip some spots randomly to make it look organic
         if (Math.random() > 0.85) continue;
         
-        newBuildings.push({
-          id: uuidv4(),
-          x: startX + i * spacing + (Math.random() * 2 - 1),
-          z: startZ + j * spacing + (Math.random() * 2 - 1),
-          seed: Math.floor(Math.random() * 10000),
-          textureSeed: Math.floor(Math.random() * 100),
-          floors: 5 + Math.floor(Math.random() * 25),
-          baseWidth: 4 + Math.random() * 5,
-          baseDepth: 4 + Math.random() * 5,
-          coreHeight: 1 + Math.random() * 3,
-          style: ['monolith', 'stacked', 'tower', 'podium', 'cantilever', 'slab'][Math.floor(Math.random() * 6)] as any,
-          rotationY: Math.floor(Math.random() * 4) * 90
-        });
+        newBuildings.push(randomBuilding(
+          startX + i * spacing + (Math.random() * 2 - 1),
+          startZ + j * spacing + (Math.random() * 2 - 1),
+          { floorsMin: 5, floorsSpan: 25, sizeSpan: 5, rotationY: Math.floor(Math.random() * 4) * 90 }
+        ));
       }
     }
 
@@ -134,7 +164,9 @@ export const useStore = create<AppState>((set) => ({
       past: newPast,
       future: [state.buildings, ...state.future],
       buildings: previous,
-      selectedId: null
+      selectedId: null,
+      _lastUpdateKey: null,
+      _lastUpdateAt: 0
     };
   }),
   redo: () => set((state) => {
@@ -142,10 +174,13 @@ export const useStore = create<AppState>((set) => ({
     const next = state.future[0];
     const newFuture = state.future.slice(1);
     return {
-      past: [...state.past, state.buildings],
+      // Capped like saveToPast; this push previously grew past without limit.
+      past: [...state.past.slice(-(MAX_HISTORY - 1)), state.buildings],
       future: newFuture,
       buildings: next,
-      selectedId: null
+      selectedId: null,
+      _lastUpdateKey: null,
+      _lastUpdateAt: 0
     };
   })
 }));

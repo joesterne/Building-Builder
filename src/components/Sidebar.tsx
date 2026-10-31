@@ -1,8 +1,18 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useStore } from '../store';
+import { useShallow } from 'zustand/react/shallow';
 
 export function Sidebar() {
-  const { buildings, selectedId, environmentMode, toggleEnvironmentMode, weathering, toggleWeathering, lightIntensity, setLightIntensity } = useStore();
+  const { buildings, selectedId, environmentMode, toggleEnvironmentMode, weathering, toggleWeathering, lightIntensity, setLightIntensity } = useStore(useShallow((state) => ({
+    buildings: state.buildings,
+    selectedId: state.selectedId,
+    environmentMode: state.environmentMode,
+    toggleEnvironmentMode: state.toggleEnvironmentMode,
+    weathering: state.weathering,
+    toggleWeathering: state.toggleWeathering,
+    lightIntensity: state.lightIntensity,
+    setLightIntensity: state.setLightIntensity
+  })));
   const selectedBuilding = buildings.find(b => b.id === selectedId);
   const [logs, setLogs] = useState<{time: string, msg: string, type: string}[]>([
     {time: '08:22:11', msg: 'INITIALIZING VOXEL_ENGINE...', type: 'text-zinc-500'},
@@ -15,7 +25,7 @@ export function Sidebar() {
       const time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
       setLogs(prev => [...prev, {time, msg: `SELECTED: ENTITY_${selectedBuilding.id.substring(0, 4).toUpperCase()}`, type: 'text-zinc-300'}].slice(-7));
     }
-  }, [selectedBuilding]);
+  }, [selectedBuilding?.id]);
 
   return (
     <aside className="w-72 border-l border-white/5 bg-[#0a0a0a] p-6 flex flex-col z-10">

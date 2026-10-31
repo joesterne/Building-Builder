@@ -1,16 +1,34 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useCallback, useEffect, Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Sky, Environment, ContactShadows, PerspectiveCamera, OrthographicCamera } from '@react-three/drei';
+import { OrbitControls, Environment, ContactShadows, PerspectiveCamera, OrthographicCamera } from '@react-three/drei';
 import { EffectComposer, N8AO, Bloom } from '@react-three/postprocessing';
 import { useStore } from '../store';
+import { useShallow } from 'zustand/react/shallow';
 import { Building } from './Building';
-import * as THREE from 'three';
+
+// The realistic environment loads an HDR from a remote CDN at runtime. If it
+// is slow or fails (offline, CDN down), the canvas used to suspend/blank with
+// no recourse; now the Environment sits behind Suspense + this boundary and
+// the scene degrades to its lights alone.
+class EnvironmentBoundary extends React.Component<{ children: React.ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
 
 function EnvironmentSetup({ mode, intensity }: { mode: 'abstract' | 'realistic', intensity: number }) {
   if (mode === 'realistic') {
     return (
       <>
-        <Environment preset="dawn" background />
+        <EnvironmentBoundary>
+          <Suspense fallback={null}>
+            <Environment preset="dawn" background />
+          </Suspense>
+        </EnvironmentBoundary>
         <directionalLight
           castShadow
           position={[50, 50, 50]}
@@ -40,24 +58,53 @@ function EnvironmentSetup({ mode, intensity }: { mode: 'abstract' | 'realistic',
 }
 
 export function Scene() {
-  const { buildings, selectedId, selectBuilding, moveBuilding, environmentMode, lightIntensity, cameraMode } = useStore();
+  // useShallow: subscribing to the whole store re-rendered the scene (and
+  // reconciled the whole building list) on every store change.
+  const { buildings, selectedId, selectBuilding, recordHistory, moveBuilding, environmentMode, lightIntensity, cameraMode } = useStore(useShallow((state) => ({
+    buildings: state.buildings,
+    selectedId: state.selectedId,
+    selectBuilding: state.selectBuilding,
+    recordHistory: state.recordHistory,
+    moveBuilding: state.moveBuilding,
+    environmentMode: state.environmentMode,
+    lightIntensity: state.lightIntensity,
+    cameraMode: state.cameraMode
+  })));
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const orbitRef = useRef<any>(null);
+  // Set on pointer-down; the history snapshot is taken only when the drag
+  // actually moves, so plain selection clicks don't consume undo entries.
+  const pendingHistoryRef = useRef<string | null>(null);
 
   const handlePointerDown = (id: string, e: any) => {
     e.stopPropagation();
     selectBuilding(id);
     setDraggingId(id);
+    pendingHistoryRef.current = id;
     if (orbitRef.current) orbitRef.current.enabled = false;
   };
 
-  const handlePointerUp = () => {
+  const handlePointerUp = useCallback(() => {
     setDraggingId(null);
+    pendingHistoryRef.current = null;
     if (orbitRef.current) orbitRef.current.enabled = true;
-  };
+  }, []);
+
+  // onPointerUp lived only on the Canvas: releasing the pointer outside it
+  // never cleared the drag, so orbit stayed disabled and the building stayed
+  // glued to the cursor. A window-level listener always ends the drag.
+  useEffect(() => {
+    if (!draggingId) return;
+    window.addEventListener('pointerup', handlePointerUp);
+    return () => window.removeEventListener('pointerup', handlePointerUp);
+  }, [draggingId, handlePointerUp]);
 
   const handlePointerMove = (e: any) => {
     if (draggingId) {
+      if (pendingHistoryRef.current === draggingId) {
+        recordHistory();
+        pendingHistoryRef.current = null;
+      }
       moveBuilding(draggingId, e.point.x, e.point.z);
     }
   };
